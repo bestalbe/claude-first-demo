@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>1-Year Countdown</title>
+  <title>Countdown Timer</title>
   <style>
     * {
       margin: 0;
@@ -75,11 +75,98 @@
       letter-spacing: 0.2em;
       opacity: 0.8;
     }
+
+    .input-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .input-panel label {
+      font-size: 0.95rem;
+      font-weight: 300;
+      letter-spacing: 0.15em;
+      opacity: 0.8;
+    }
+
+    .input-panel input {
+      padding: 0.75rem 1rem;
+      font-size: 1.1rem;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      text-align: center;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .input-panel input:focus {
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+    }
+
+    .btn {
+      padding: 0.75rem 2.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      transition: transform 0.15s, box-shadow 0.15s;
+      font-family: inherit;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-reset {
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      padding: 0.5rem 1.5rem;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-reset:hover {
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .error {
+      font-size: 0.85rem;
+      color: #ff6b6b;
+      opacity: 0.9;
+    }
   </style>
 </head>
 <body>
-  <h1 id="title">1 Year Countdown</h1>
-  <div class="countdown" id="countdown">
+  <h1 id="title">Countdown Timer</h1>
+
+  <!-- Input panel -->
+  <div class="input-panel" id="inputPanel">
+    <label for="deadlineInput">Enter your deadline</label>
+    <input type="datetime-local" id="deadlineInput">
+    <button class="btn" id="startBtn">Start Countdown</button>
+    <span class="error hidden" id="errorMsg">Please select a future date &amp; time.</span>
+  </div>
+
+  <!-- Countdown display -->
+  <div class="countdown hidden" id="countdown">
     <div class="unit">
       <span class="number" id="days">00</span>
       <span class="label">Days</span>
@@ -101,33 +188,42 @@
     </div>
   </div>
 
+  <button class="btn btn-reset hidden" id="resetBtn">Set New Deadline</button>
+
   <script>
-    const STORAGE_KEY = 'countdown_first_opened';
+    const STORAGE_KEY = 'countdown_deadline';
 
-    let firstOpened = localStorage.getItem(STORAGE_KEY);
-    if (!firstOpened) {
-      firstOpened = Date.now().toString();
-      localStorage.setItem(STORAGE_KEY, firstOpened);
-    }
+    // DOM refs
+    const titleEl        = document.getElementById('title');
+    const inputPanel     = document.getElementById('inputPanel');
+    const deadlineInput  = document.getElementById('deadlineInput');
+    const startBtn       = document.getElementById('startBtn');
+    const errorMsg       = document.getElementById('errorMsg');
+    const countdownEl    = document.getElementById('countdown');
+    const resetBtn       = document.getElementById('resetBtn');
+    let daysEl         = document.getElementById('days');
+    let hoursEl        = document.getElementById('hours');
+    let minutesEl      = document.getElementById('minutes');
+    let secondsEl      = document.getElementById('seconds');
 
-    const firstOpenedDate = new Date(parseInt(firstOpened, 10));
-    const target = new Date(firstOpenedDate);
-    target.setFullYear(target.getFullYear() + 1);
-
-    const fmt = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    document.getElementById('title').textContent = 'Countdown to ' + fmt.format(target);
+    let target = null;
+    let timerId = null;
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
 
     function pad(n) {
       return String(n).padStart(2, '0');
     }
 
     function tick() {
-      const now = Date.now();
-      const diff = target.getTime() - now;
+      const diff = target.getTime() - Date.now();
 
       if (diff <= 0) {
-        document.getElementById('countdown').innerHTML =
-          '<span class="expired">1 year reached!</span>';
+        countdownEl.innerHTML = '<span class="expired">Time&#39;s up!</span>';
+        clearInterval(timerId);
+        timerId = null;
         return;
       }
 
@@ -136,14 +232,115 @@
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-      document.getElementById('days').textContent    = pad(days);
-      document.getElementById('hours').textContent   = pad(hours);
-      document.getElementById('minutes').textContent = pad(minutes);
-      document.getElementById('seconds').textContent = pad(seconds);
+      daysEl.textContent    = pad(days);
+      hoursEl.textContent   = pad(hours);
+      minutesEl.textContent = pad(minutes);
+      secondsEl.textContent = pad(seconds);
     }
 
-    tick();
-    setInterval(tick, 1000);
+    function startCountdown(deadlineStr) {
+      target = new Date(deadlineStr);
+
+      // Restore the countdown innerHTML in case it was replaced by "Time's up!"
+      countdownEl.innerHTML =
+        '<div class="unit">' +
+          '<span class="number" id="days">00</span>' +
+          '<span class="label">Days</span>' +
+        '</div>' +
+        '<span class="separator">:</span>' +
+        '<div class="unit">' +
+          '<span class="number" id="hours">00</span>' +
+          '<span class="label">Hours</span>' +
+        '</div>' +
+        '<span class="separator">:</span>' +
+        '<div class="unit">' +
+          '<span class="number" id="minutes">00</span>' +
+          '<span class="label">Minutes</span>' +
+        '</div>' +
+        '<span class="separator">:</span>' +
+        '<div class="unit">' +
+          '<span class="number" id="seconds">00</span>' +
+          '<span class="label">Seconds</span>' +
+        '</div>';
+
+      // Re-query elements after innerHTML replacement (old refs are stale)
+      daysEl    = document.getElementById('days');
+      hoursEl   = document.getElementById('hours');
+      minutesEl = document.getElementById('minutes');
+      secondsEl = document.getElementById('seconds');
+
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+
+      titleEl.textContent = 'Countdown to ' + fmt.format(target);
+
+      inputPanel.classList.add('hidden');
+      countdownEl.classList.remove('hidden');
+      resetBtn.classList.remove('hidden');
+
+      // If already expired, show it immediately
+      if (target.getTime() - Date.now() <= 0) {
+        countdownEl.innerHTML = '<span class="expired">Time&#39;s up!</span>';
+        return;
+      }
+
+      tick();
+      timerId = setInterval(tick, 1000);
+    }
+
+    function showInputPanel() {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      target = null;
+      localStorage.removeItem(STORAGE_KEY);
+
+      inputPanel.classList.remove('hidden');
+      countdownEl.classList.add('hidden');
+      resetBtn.classList.add('hidden');
+      errorMsg.classList.add('hidden');
+      titleEl.textContent = 'Countdown Timer';
+    }
+
+    // --- Event listeners ---
+
+    startBtn.addEventListener('click', function () {
+      const val = deadlineInput.value;
+      if (!val) {
+        errorMsg.textContent = 'Please select a date & time.';
+        errorMsg.classList.remove('hidden');
+        return;
+      }
+      const chosen = new Date(val);
+      if (chosen.getTime() <= Date.now()) {
+        errorMsg.textContent = 'Please select a future date & time.';
+        errorMsg.classList.remove('hidden');
+        return;
+      }
+      errorMsg.classList.add('hidden');
+      localStorage.setItem(STORAGE_KEY, val);
+      startCountdown(val);
+    });
+
+    deadlineInput.addEventListener('input', function () {
+      errorMsg.classList.add('hidden');
+    });
+
+    resetBtn.addEventListener('click', showInputPanel);
+
+    // --- Restore saved deadline on load ---
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const d = new Date(saved);
+      if (!isNaN(d.getTime()) && d.getTime() > Date.now()) {
+        startCountdown(saved);
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
   </script>
 </body>
 </html>
